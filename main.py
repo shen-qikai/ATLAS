@@ -15,7 +15,7 @@ import wafer_yield_summary  # <-- 新引入的模块
 class MainApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("晶圆数据综合处理系统 (Wafer Data Toolkit) v12.0") # 升级下版本号
+        self.root.title("ATLAS - Automated Test Learning & Analytics System v1.1.0")
         self.root.geometry("1000x800") 
         self.root.minsize(800, 600)
         

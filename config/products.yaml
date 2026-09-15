@@ -1,0 +1,92 @@
+# Synthetic Product Profiles for ATLAS v1.1.0.
+# Replace or extend these entries with approved product-specific naming rules.
+products:
+  WS1201:
+    enabled: true
+    naming:
+      version: 1
+      regex: '_(?P<lot>[A-Za-z0-9]+)-(?P<wafer>\d+)-.*\.csv$'
+      examples:
+        - input: 'ABC_DPJ579-01-X.csv'
+          lot: 'DPJ579'
+          wafer: '01'
+    output_name:
+      template: '{product}_{lot}_{wafer}#_{original}'
+    validation:
+      lot_required: true
+      wafer_required: true
+      wafer_min: 1
+      wafer_max: 99
+
+  WS1203:
+    enabled: true
+    naming:
+      version: 1
+      regex: '_(?P<lot>[A-Za-z0-9]+)-(?P<wafer>\d+)[A-Za-z].*\.csv$'
+      examples:
+        - input: 'ABC_DPJ579-06B4-X.csv'
+          lot: 'DPJ579'
+          wafer: '06'
+    output_name:
+      template: '{product}_{lot}_{wafer}#_{original}'
+    validation:
+      lot_required: true
+      wafer_required: true
+      wafer_min: 1
+      wafer_max: 99
+
+  WS1234:
+    enabled: true
+    naming:
+      version: 1
+      regex: '_(?P<lot>[A-Za-z0-9]+)-(?P<wafer>\d+)-.*\.csv$'
+      examples:
+        - input: 'ABC_DPJ580-25-Y.csv'
+          lot: 'DPJ580'
+          wafer: '25'
+    output_name:
+      template: '{product}_{lot}_{wafer}#_{original}'
+    validation:
+      lot_required: true
+      wafer_required: true
+      wafer_min: 1
+      wafer_max: 99
+
+  WS1256:
+    enabled: true
+    naming:
+      version: 1
+      regex: '(?P<lot>[A-Za-z0-9]+)_W(?P<wafer>\d+)_.*\.csv$'
+      examples:
+        - input: 'LOT123_W05_FT.csv'
+          lot: 'LOT123'
+          wafer: '05'
+    output_name:
+      template: '{product}_{lot}_{wafer}#_{original}'
+    validation:
+      lot_required: true
+      wafer_required: true
+      wafer_min: 1
+      wafer_max: 99
+
+products:
+  WS0712:
+    enabled: true
+    naming:
+      version: 1
+      regex: '^JWIC246PR1-CP_(?P<lot>N\d+(?:\.\d+)?)_(?P<wafer>\d+)#_(?P<stage>CP|RT\d+)\.csv$'
+      examples:
+        - input: 'JWIC246PR1-CP_N39472.1_1#_CP.csv'
+          lot: 'N39472.1'
+          wafer: '1'
+        - input: 'JWIC246PR1-CP_N39472.1_2#_CP.csv'
+          lot: 'N39472.1'
+          wafer: '2'
+        - input: 'JWIC246PR1-CP_N39472.1_2#_RT1.csv'
+          lot: 'N39472.1'
+          wafer: '2'
+    validation:
+      lot_required: true
+      wafer_required: true
+      wafer_min: 1
+      wafer_max: 99

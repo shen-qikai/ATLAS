@@ -4,3 +4,4 @@ matplotlib
 openpyxl
 Pillow
 scipy
+PyYAML>=6.0

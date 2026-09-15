@@ -8,7 +8,7 @@ ATLAS is an internal semiconductor FT/Wafer data analysis toolkit.
 
 Current version:
 
-v1.0.0
+v1.1.0
 
 ## Purpose
 
@@ -24,6 +24,15 @@ ATLAS supports semiconductor FT and wafer data analysis, including data preproce
 - BIN Map
 - Test Map
 - Probability Plot
+- Config-driven Product Profiles for FT filename parsing
+- Mandatory Preview and validation before filename normalization
+
+## Product Profiles
+
+FT naming rules are stored in `config/products.yaml`. Each enabled product must
+define a Regex with named `lot` and `wafer` capture groups. The bundled entries
+are synthetic examples and should be replaced or extended only with approved,
+non-sensitive product configuration.
 
 ## Entry Point
 
