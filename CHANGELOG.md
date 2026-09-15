@@ -6,6 +6,23 @@ The version format follows:
 
 MAJOR.MINOR.PATCH
 
+## [v1.1.0] - 2026-09-16
+
+### Added
+
+- Added YAML-based Product Profiles with versioned, named-group Regex rules.
+- Added an autocomplete Product selector restricted to enabled profiles.
+- Added mandatory tabular Preview, metadata validation, and collision checks.
+- Added raw/archive/normalized/unknown file classification and preprocessing logs.
+- Added regression tests using synthetic filenames and data only.
+
+### Changed
+
+- Separated reusable preprocessing logic from the Tkinter UI.
+- Kept the existing `{product}_{lot}_{wafer}#_{original}` output naming format for
+  compatibility with downstream Cleaning, Yield, BIN, Map, and Probability tools.
+- Made ZIP/GZ extraction preserve archives by default and reject overwrites.
+
 ## [v1.0.0] - 2026-09-15
 
 ### Added
