@@ -1,4 +1,5 @@
 # 文件名: main.py
+# Git 学习演示：这是一条没有业务影响的注释。
 import tkinter as tk
 from tkinter import ttk
 
