@@ -1,0 +1,75 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+~$*
+
+# FT raw data and production data
+data/
+raw_data/
+production_data/
+company_data/
+ATLAS_DATA/
+
+# Data files
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.xlsm
+
+# Generated outputs
+output/
+outputs/
+result/
+results/
+reports/
+
+# Generated figures and maps
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+*.svg
+*.html
+
+# Python build / packaging
+build/
+dist/
+*.egg-info/
+
+# Test / coverage cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environment variables
+.env
+.env.*
