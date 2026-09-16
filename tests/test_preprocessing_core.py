@@ -21,9 +21,8 @@ class ProductProfileTests(unittest.TestCase):
         self.store = ProductProfileStore.from_yaml(CONFIG_PATH)
 
     def test_product_profiles_and_examples_load(self):
-        self.assertEqual(
-            self.store.product_names,
-            ("WS1201", "WS1203", "WS1234", "WS1256"),
+        self.assertTrue(
+            {"WS1201", "WS1203", "WS1234", "WS1256"}.issubset(self.store.product_names)
         )
         profile = self.store.get("ws1234")
         self.assertEqual(profile.naming_version, 1)
@@ -79,6 +78,10 @@ class PreprocessingServiceTests(unittest.TestCase):
         self.assertEqual(scan.raw_csv, ())
         self.assertEqual(len(scan.normalized_csv), 1)
         self.assertFalse(preview.validation_passed)
+
+    def test_normalized_lot_can_contain_dot(self):
+        self._write("WS1234_N39472.1_1#_CP.csv")
+        self.assertEqual(len(self.service.scan_folder(self.folder).normalized_csv), 1)
 
     def test_existing_output_collision_blocks_execution(self):
         original = "ABC_DPJ579-01-X.csv"

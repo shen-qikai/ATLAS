@@ -168,7 +168,7 @@ class ProbabilityLogic:
             plt.close()
             return False
 
-    def stitch_images_2x2(self, image_list, output_folder, file_stem, prefix_name):
+    def stitch_images_2x2(self, image_list, output_folder, file_stem, prefix_name, strict=False):
         if not image_list: return
         self.log(f"正在执行图片拼接 (2x2)...")
         chunks = [image_list[i:i + 4] for i in range(0, len(image_list), 4)]
@@ -187,6 +187,8 @@ class ProbabilityLogic:
                 new_im.save(output_folder / save_name, quality=95)
                 self.log(f"  -> 生成拼接图: {save_name}")
             except Exception as e:
+                if strict:
+                    raise
                 self.log(f"  拼接第 {i+1} 页时失败: {e}")
 
     def process_file(self, file_path, settings, highlight_columns=None, marker_size=5, selected_sheets=None):
@@ -485,13 +487,19 @@ class ProbabilityApp:
 # ==========================================
 # 统一入口与独立测试
 # ==========================================
-def create_ui(parent):
-    """供 main.py 调用的接口"""
+def create_excel_ui(parent):
+    """Optional legacy Excel entry point; direct plotting no longer requires merge."""
     return ProbabilityApp(parent)
+
+
+def create_ui(parent, service=None, root_var=None):
+    from direct_plot_ui import DirectPlotApp
+    return DirectPlotApp(parent, "probability", service, root_var)
 
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("[独立运行] - 概率分布叠加图")
-    root.geometry("850x750")
-    app = ProbabilityApp(root)
+    root.geometry("1200x850")
+    root.minsize(1000, 650)
+    app = create_ui(root)
     root.mainloop()

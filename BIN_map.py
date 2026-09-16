@@ -134,7 +134,7 @@ def _add_custom_legend(ax, df, legend_info):
                  bbox_to_anchor=(1.02, 0.5), frameon=True, 
                  fontsize=8, ncol=ncols)
 
-def create_wafer_map_pcolormesh(df, ax=None, wafer_number=None, notch_direction=6, mode=1, specific_bin=None, small_font=False, global_settings=None, add_legend=True):
+def create_wafer_map_pcolormesh(df, ax=None, wafer_number=None, notch_direction=6, mode=1, specific_bin=None, small_font=False, global_settings=None, add_legend=True, strict=False):
     if ax is None:
         fig, ax = plt.subplots(figsize=(8, 8))
     try:
@@ -197,6 +197,8 @@ def create_wafer_map_pcolormesh(df, ax=None, wafer_number=None, notch_direction=
             
         return ax
     except Exception as e:
+        if strict:
+            raise
         print(f"绘图出错: {e}")
         return ax
 
@@ -570,7 +572,7 @@ class BinMapApp:
             sys.stdout = original_stdout
             self.parent.after(0, lambda: self.run_btn.config(state='normal'))
     
-    def create_combined_maps(self, wafer_data, folder_path, excel_file, notch_dir, tasks, mode_output_dirs, sort_method, manual_order):
+    def create_combined_maps(self, wafer_data, folder_path, excel_file, notch_dir, tasks, mode_output_dirs, sort_method, manual_order, strict=False):
         try:
             mode_names = {0: "多彩", 1: "BIN1绿", 2: "BIN高亮"}
             excel_base = os.path.splitext(excel_file)[0]
@@ -622,19 +624,27 @@ class BinMapApp:
                 plt.savefig(os.path.join(bin_maps_dir, f"{excel_base}_notch{notch_dir}_combined_composites.png"), dpi=300, bbox_inches='tight')
                 plt.close()
         except Exception as e:
+            if strict:
+                raise
             print(f"拼接图时出错: {e}")
 
 # ==========================================
 # 统一入口与独立测试
 # ==========================================
-def create_ui(parent):
-    """供 main.py 调用的接口"""
+def create_excel_ui(parent):
+    """Optional legacy Excel entry point."""
     return BinMapApp(parent)
+
+
+def create_ui(parent, service=None, root_var=None):
+    from direct_plot_ui import DirectPlotApp
+    return DirectPlotApp(parent, "bin", service, root_var)
 
 if __name__ == "__main__":
     # 独立运行时的测试窗口
     root = tk.Tk()
     root.title("[独立运行] - 晶圆BIN Map生成器")
-    root.geometry("900x850")
-    app = BinMapApp(root)
+    root.geometry("1200x850")
+    root.minsize(1000, 650)
+    app = create_ui(root)
     root.mainloop()

@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext, messagebox
 import re
 import glob
+from atlas_pipeline.plot_jobs import safe_name
 
 warnings.filterwarnings('ignore')
 
@@ -150,13 +151,14 @@ def save_single_map(df, col, wid, out_dir, fname, meta, mode, g_val, r_val, notc
     unit = f"({meta.get('unit','')})" if meta.get('unit') else ""
     title = f"{col} {unit} {wid}"
     plot_wafer(ax, df, col, title, meta, mode, g_val, r_val, notch_dir, show_cbar=(mode != 'pass_fail'))
-    safe = wid.replace(':', '_').replace('/', '_').replace('\\', '_')
-    plt.savefig(os.path.join(out_dir, f"{os.path.splitext(fname)[0]}_{col}_{safe}_notch{notch_dir}_{mode}.png"), 
+    safe = safe_name(wid)
+    plt.savefig(os.path.join(out_dir, f"{os.path.splitext(fname)[0]}_{safe_name(col)}_{safe}_notch{notch_dir}_{mode}.png"),
                 dpi=300, bbox_inches='tight')
     plt.close()
 
 # ========== 整合图 ==========
-def save_composite(wafer_dict, col, out_dir, fname, metas, mode, g_val, r_val, notch_dir, sort_meth, manual_ord):
+def save_composite(wafer_dict, col, out_dir, fname, metas, mode, g_val, r_val, notch_dir, sort_meth, manual_ord,
+                   display_labels=None):
     n = len(wafer_dict)
     if n == 0: return
     if sort_meth == 'manual' and manual_ord:
@@ -194,20 +196,21 @@ def save_composite(wafer_dict, col, out_dir, fname, metas, mode, g_val, r_val, n
     mesh = None
     for i, wid in enumerate(ids):
         ax = fig.add_subplot(r, c, i+1)
-        mesh = plot_wafer(ax, wafer_dict[wid], col, wid, metas[wid], mode, gvmin, gvmax, notch_dir, show_cbar=False)
+        title = display_labels.get(wid, wid) if display_labels else wid
+        mesh = plot_wafer(ax, wafer_dict[wid], col, title, metas[wid], mode, gvmin, gvmax, notch_dir, show_cbar=False)
     
     plt.subplots_adjust(left=0.05, right=0.92 if mode != 'pass_fail' else 0.98, top=0.90, wspace=0.15, hspace=0.25)
     if mesh and mode != 'pass_fail':
         cax = fig.add_axes([0.93, 0.15, 0.015, 0.7])
         cbar = plt.colorbar(mesh, cax=cax)
         cbar.set_label({'auto': 'Global Sigma', 'manual': 'Manual', 'usl_lsl': 'USL/LSL'}.get(mode, ''), fontsize=14)
-    plt.savefig(os.path.join(out_dir, f"{os.path.splitext(fname)[0]}_{col}_composite_{r}x{c}_notch{notch_dir}_{mode}.png"), 
+    plt.savefig(os.path.join(out_dir, f"{os.path.splitext(fname)[0]}_{safe_name(col)}_composite_{r}x{c}_notch{notch_dir}_{mode}.png"),
                 dpi=300, bbox_inches='tight')
     plt.close()
 
 # ========== 多模式拼接图 ==========
 def create_combined_maps(wafer_data, test_col, out_base, fname, all_meta, modes_to_combine, 
-                         sort_meth, manual_ord, notch_dir, log_func):
+                         sort_meth, manual_ord, notch_dir, log_func, display_labels=None, strict=False):
     mode_names = {'auto': '自动3σ', 'manual': '手动', 'usl_lsl': 'USL/LSL', 'pass_fail': 'Pass/Fail'}
     if len(modes_to_combine) <= 1: return
 
@@ -222,25 +225,32 @@ def create_combined_maps(wafer_data, test_col, out_base, fname, all_meta, modes_
             fig, axes = plt.subplots(1, len(modes_to_combine), figsize=(6 * len(modes_to_combine), 6))
             if len(modes_to_combine) == 1: axes = [axes]
             for i, mode in enumerate(modes_to_combine):
-                safe = wid.replace(':', '_').replace('/', '_').replace('\\', '_')
-                img_path = os.path.join(out_base, mode, f"{os.path.splitext(fname)[0]}_{test_col}_{safe}_notch{notch_dir}_{mode}.png")
+                safe = safe_name(wid)
+                img_path = os.path.join(out_base, mode, f"{os.path.splitext(fname)[0]}_{safe_name(test_col)}_{safe}_notch{notch_dir}_{mode}.png")
                 if os.path.exists(img_path):
                     axes[i].imshow(plt.imread(img_path))
                     axes[i].set_title(mode_names.get(mode, mode), fontsize=14, fontweight='bold')
+                elif strict:
+                    raise FileNotFoundError(img_path)
                 axes[i].axis('off')
             unit = f"({next(iter(all_meta.values())).get('unit','')})" if all_meta else ""
-            fig.suptitle(f"{test_col} {unit} - {wid}", fontsize=16, fontweight='bold', y=0.98)
+            title = display_labels.get(wid, wid) if display_labels else wid
+            fig.suptitle(f"{test_col} {unit} - {title}", fontsize=16, fontweight='bold', y=0.98)
             plt.tight_layout()
-            plt.savefig(os.path.join(out_base, f"{os.path.splitext(fname)[0]}_{test_col}_{wid}_combined_subplots.png"), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(out_base, f"{os.path.splitext(fname)[0]}_{safe_name(test_col)}_{safe_name(wid)}_combined_subplots.png"), dpi=300, bbox_inches='tight')
             plt.close()
         except Exception as e:
+            if strict:
+                raise
             log_func(f"    -> 子图拼接失败 ({wid}): {e}")
 
     try:
         mode_imgs = []
         for mode in modes_to_combine:
-            files = glob.glob(os.path.join(out_base, mode, f"{os.path.splitext(fname)[0]}_{test_col}_composite_*_notch{notch_dir}_{mode}.png"))
+            files = glob.glob(os.path.join(out_base, mode, f"{os.path.splitext(fname)[0]}_{safe_name(test_col)}_composite_*_notch{notch_dir}_{mode}.png"))
             if files: mode_imgs.append((plt.imread(files[0]), mode_names.get(mode, mode)))
+            elif strict:
+                raise FileNotFoundError(f"缺少 {mode} 整合图")
         if len(mode_imgs) > 1:
             fig, axes = plt.subplots(1, len(mode_imgs), figsize=(10 * len(mode_imgs), 10))
             if len(mode_imgs) == 1: axes = [axes]
@@ -249,9 +259,11 @@ def create_combined_maps(wafer_data, test_col, out_base, fname, all_meta, modes_
             unit = f"({next(iter(all_meta.values())).get('unit','')})" if all_meta else ""
             fig.suptitle(f"{test_col} {unit}", fontsize=28, fontweight='bold', y=0.95)
             plt.tight_layout()
-            plt.savefig(os.path.join(out_base, f"{os.path.splitext(fname)[0]}_{test_col}_combined_composites.png"), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(out_base, f"{os.path.splitext(fname)[0]}_{safe_name(test_col)}_combined_composites.png"), dpi=300, bbox_inches='tight')
             plt.close()
     except Exception as e:
+        if strict:
+            raise
         log_func(f"    -> 整图拼接失败: {e}")
 
 # ==========================================
@@ -423,14 +435,20 @@ class WaferMapApp:
 # ==========================================
 # 统一入口与独立测试
 # ==========================================
-def create_ui(parent):
-    """供 main.py 调用的接口"""
+def create_excel_ui(parent):
+    """Optional legacy Excel entry point."""
     return WaferMapApp(parent)
+
+
+def create_ui(parent, service=None, root_var=None):
+    from direct_plot_ui import DirectPlotApp
+    return DirectPlotApp(parent, "test", service, root_var)
 
 if __name__ == "__main__":
     # 独立运行时的测试窗口
     root = tk.Tk()
     root.title("[独立运行] - 测试项热力图")
-    root.geometry("800x800")
-    app = WaferMapApp(root)
+    root.geometry("1200x850")
+    root.minsize(1000, 650)
+    app = create_ui(root)
     root.mainloop()

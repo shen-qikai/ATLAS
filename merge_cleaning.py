@@ -22,8 +22,6 @@ class WaferMergeToolGUI:
         # === 变量初始化 ===
         self.folder_path_var = tk.StringVar()
         self.cleaning_mode_var = tk.StringVar(value="1")
-        self.generate_only_data_var = tk.BooleanVar(value=False)
-        self.generate_summary_var = tk.BooleanVar(value=True)
         
         self.header_key_var = tk.StringVar(value="SITE_NUM")
         self.pass_fail_col_var = tk.StringVar(value="PASSFG")
@@ -89,16 +87,7 @@ class WaferMergeToolGUI:
                         variable=self.cleaning_mode_var, value="1").pack(anchor=tk.W, pady=2)
         ttk.Radiobutton(mode_frame, text="2. 基于RT条件清理 (RT Cleaning) - 无RT全留，有RT则去Fail", 
                         variable=self.cleaning_mode_var, value="2").pack(anchor=tk.W, pady=2)
-        ttk.Radiobutton(mode_frame, text="3. 不进行清理 (仅合并)", 
-                        variable=self.cleaning_mode_var, value="3").pack(anchor=tk.W, pady=2)
-        
-        ttk.Separator(mode_frame, orient='horizontal').pack(fill='x', pady=5)
-        ttk.Checkbutton(mode_frame, text="生成纯数据文件 (Generate Only Data)", 
-                        variable=self.generate_only_data_var).pack(anchor=tk.W, pady=2)
-        
-        ttk.Separator(mode_frame, orient='horizontal').pack(fill='x', pady=5)
-        ttk.Checkbutton(mode_frame, text="输出整合文件 (生成汇总文件+清理结果)", 
-                        variable=self.generate_summary_var).pack(anchor=tk.W, pady=2)
+        ttk.Label(mode_frame, text="只输出整合后清理结果，保留单位/规格等信息。").pack(anchor=tk.W, pady=5)
         
         # --- 执行按钮与日志 ---
         btn_frame = ttk.Frame(self.parent, padding="10")
@@ -207,31 +196,24 @@ class WaferMergeToolGUI:
         self.start_btn.config(state='disabled')
         self.clear_log()
         rt_files_set = self.get_rt_files_set()
+        mode = self.cleaning_mode_var.get()
         
         thread = threading.Thread(target=self.run_process, 
-                                  args=(folder_path, header_key, pass_fail_col, x_col, y_col, rt_files_set))
+                                  args=(folder_path, header_key, pass_fail_col, x_col, y_col, rt_files_set, mode))
         thread.daemon = True
         thread.start()
 
-    def run_process(self, folder_path, header_key, pass_fail_col, x_col, y_col, rt_files_set):
+    def run_process(self, folder_path, header_key, pass_fail_col, x_col, y_col, rt_files_set, mode):
         try:
             self.log("=== 开始合并汇总处理 ===")
-            mode = self.cleaning_mode_var.get()
-            generate_only_data = self.generate_only_data_var.get()
-            generate_summary = self.generate_summary_var.get()
-            
-            folder_name_summary = "summary_data"
-            folder_name_cleaning = "summary_cleaning_data"
-            
-            if generate_summary or mode not in ('1', '2'):
-                output_folder_summary = self.create_output_folder(folder_path, folder_name_summary, False)
-            output_folder_summary_cleaning = self.create_output_folder(folder_path, folder_name_cleaning, False)
+            if mode not in ('1', '2'):
+                raise ValueError("只支持坐标清理或RT条件清理")
+            output_folder_summary_cleaning = self.create_output_folder(folder_path, "summary_cleaning_data", False)
 
             files = os.listdir(folder_path)
             wafer_ids = self.extract_wafer_ids_sorted(folder_path)
             self.log(f"检测到 {len(wafer_ids)} 个 Wafer ID")
 
-            last_processed_folder = output_folder_summary if (generate_summary or mode not in ('1', '2')) else output_folder_summary_cleaning
 
             for wafer_id in wafer_ids:
                 self.log(f"\n--- 处理晶圆 {wafer_id} ---")
@@ -277,42 +259,18 @@ class WaferMergeToolGUI:
                 
                 if f'_{wafer_id}#' in first_file:
                     base_part = first_file.split(f'_{wafer_id}#')[0]
-                    out_name_summary = f'{base_part}_{wafer_id}#_summary.csv'
                     out_name_summary_cleaning = f'{base_part}_{wafer_id}#_summary_cleaning.csv'
                 else:
-                    out_name_summary = f'Wafer_{wafer_id}_summary.csv'
                     out_name_summary_cleaning = f'Wafer_{wafer_id}_summary_cleaning.csv'
 
                 full_out_path_summary_cleaning = os.path.join(output_folder_summary_cleaning, out_name_summary_cleaning)
 
-                if not generate_summary and mode in ('1', '2'):
-                    self.log(f"  [跳过] 不输出整合文件夹，直接进行清理...")
-                    if mode == '1':
-                        success = self.data_cleaning_coord_logic(
-                            None, full_out_path_summary_cleaning, x_col, y_col, df=summary_df, header_key=header_key)
-                    elif mode == '2':
-                        success = self.data_cleaning_rt_logic_new(
-                            None, full_out_path_summary_cleaning, pass_fail_col, rt_files_set, wafer_filenames, df=summary_df, header_key=header_key)
-                    if success: last_processed_folder = output_folder_summary_cleaning
+                if mode == '1':
+                    self.data_cleaning_coord_logic(
+                        None, full_out_path_summary_cleaning, x_col, y_col, df=summary_df, header_key=header_key)
                 else:
-                    full_out_path_summary = os.path.join(output_folder_summary, out_name_summary)
-                    summary_df.to_csv(full_out_path_summary, index=False)
-                    self.log(f"  已生成汇总文件: {out_name_summary}")
-
-                    if mode == '1': 
-                        success = self.data_cleaning_coord_logic(full_out_path_summary, full_out_path_summary_cleaning, x_col, y_col)
-                        if success: last_processed_folder = output_folder_summary_cleaning
-                    elif mode == '2': 
-                        success = self.data_cleaning_rt_logic_new(full_out_path_summary, full_out_path_summary_cleaning, pass_fail_col, rt_files_set, wafer_filenames)
-                        if success: last_processed_folder = output_folder_summary_cleaning
-                    elif mode == '3':
-                        last_processed_folder = output_folder_summary
-
-            if generate_only_data:
-                self.log("\n=== 正在生成纯数据文件 ===")
-                folder_name_onlydata = "summary_clean_onlydata"
-                output_folder_onlydata = self.create_output_folder(last_processed_folder, folder_name_onlydata, True)
-                self.process_only_data_logic(last_processed_folder, output_folder_onlydata, header_key)
+                    self.data_cleaning_rt_logic_new(
+                        None, full_out_path_summary_cleaning, pass_fail_col, rt_files_set, wafer_filenames, df=summary_df, header_key=header_key)
 
             self.log("\n=== 全部处理完成! ===")
             self.parent.after(0, lambda: messagebox.showinfo("完成", "所有文件处理完成！"))
