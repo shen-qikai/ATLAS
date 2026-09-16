@@ -23,6 +23,10 @@ Thumbs.db
 # Logs
 *.log
 logs/
+.atlas/
+_atlas_runs/
+*.sqlite
+*.sqlite-*
 
 # Temporary files
 *.tmp

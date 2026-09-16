@@ -18,6 +18,39 @@ class ProfileConfigError(ValueError):
     """Raised when a product profile is missing or malformed."""
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    """Reject duplicate YAML keys rather than silently losing product profiles."""
+
+
+def _unique_mapping(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise ProfileConfigError(f"products.yaml 存在重复字段: {key}")
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _unique_mapping
+)
+
+
+def load_product_document(config_path: str | Path) -> dict:
+    path = Path(config_path)
+    if not path.is_file():
+        raise ProfileConfigError(f"Product Profile 配置不存在: {path}")
+    try:
+        with path.open("r", encoding="utf-8-sig") as config_file:
+            document = yaml.load(config_file, Loader=UniqueKeyLoader) or {}
+    except yaml.YAMLError as exc:
+        raise ProfileConfigError(f"products.yaml 格式错误: {exc}") from exc
+    if not isinstance(document, dict):
+        raise ProfileConfigError("products.yaml 顶层必须是映射")
+    return document
+
+
 class PreviewValidationError(ValueError):
     """Raised when a preview cannot safely be executed."""
 
@@ -109,19 +142,12 @@ class ProductProfileStore:
     def __init__(self, profiles: dict[str, ProductProfile]):
         self._profiles = profiles
         self._names_by_casefold = {name.casefold(): name for name in profiles}
+        if len(self._names_by_casefold) != len(profiles):
+            raise ProfileConfigError("Product 名称存在大小写重复，无法唯一选择配置")
 
     @classmethod
     def from_yaml(cls, config_path: str | Path) -> "ProductProfileStore":
-        path = Path(config_path)
-        if not path.is_file():
-            raise ProfileConfigError(f"Product Profile 配置不存在: {path}")
-
-        try:
-            with path.open("r", encoding="utf-8-sig") as config_file:
-                document = yaml.safe_load(config_file) or {}
-        except yaml.YAMLError as exc:
-            raise ProfileConfigError(f"products.yaml 格式错误: {exc}") from exc
-
+        document = load_product_document(config_path)
         raw_products = document.get("products")
         if not isinstance(raw_products, dict) or not raw_products:
             raise ProfileConfigError("products.yaml 必须包含非空的 products 映射")
@@ -288,7 +314,7 @@ class ProductProfileStore:
     def is_normalized_filename(self, filename: str) -> bool:
         """Recognize the legacy ATLAS name retained for downstream compatibility."""
         for product in self.product_names:
-            pattern = rf"^{re.escape(product)}_[A-Za-z0-9]+_\d+#_.*\.csv$"
+            pattern = rf"^{re.escape(product)}_[^_#]+_\d+#_.*\.csv$"
             if re.match(pattern, filename, re.IGNORECASE):
                 return True
         return False

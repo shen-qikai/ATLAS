@@ -8,7 +8,7 @@ ATLAS is an internal semiconductor FT/Wafer data analysis toolkit.
 
 Current version:
 
-v1.1.0
+v1.4.0
 
 ## Purpose
 
@@ -26,6 +26,8 @@ ATLAS supports semiconductor FT and wafer data analysis, including data preproce
 - Probability Plot
 - Config-driven Product Profiles for FT filename parsing
 - Mandatory Preview and validation before filename normalization
+- Incremental root-folder cleaning and three cumulative product-level yield reports
+- Direct cleaned-CSV plotting with Product/Lot/Wafer selection and shared bounded cache
 
 ## Product Profiles
 
@@ -41,6 +43,16 @@ Run:
 ```bash
 python main.py
 ```
+
+Use the **自动增量良率** tab for root-folder processing. See
+[the incremental pipeline guide](docs/incremental_pipeline.md) for directory layout,
+product configuration, die-count checks, recovery, and CLI usage.
+
+The BIN Map, Test Map, and Probability tabs now have a shared left-hand data
+selector and right-hand plotting options. They read processed Wafer CSVs directly;
+Merge BIN is an optional Excel export, not a prerequisite for plotting. See
+[the direct plotting guide](docs/direct_plotting.md) for selection, cache behavior,
+reference groups, and output locations.
 
 ## Data Policy
 

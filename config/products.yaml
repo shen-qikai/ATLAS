@@ -1,5 +1,23 @@
-# Synthetic Product Profiles for ATLAS v1.1.0.
+# Product Profiles for ATLAS v1.2.0.
 # Replace or extend these entries with approved product-specific naming rules.
+pipeline_defaults:
+  cleaning:
+    mode: coord                 # coord or rt; retains the existing cleaning rules
+  columns:
+    header: SITE_NUM
+    pass_fail: PASSFG
+    x: X_COORD
+    y: Y_COORD
+    soft_bin: SOFT_BIN
+  yield:
+    denominator: TotalCount    # Legacy field; automated failure rates always use wafer total die
+    good_bins: [1]
+  wafer:
+    expected_die_count: null    # Set the product's expected count if known
+    die_count_tolerance: 500     # Warning only; does not reject a wafer
+  automation:
+    test_stage: FT              # Legacy cache compatibility only; not a physical CP/FT classification
+
 products:
   WS1201:
     enabled: true
@@ -69,7 +87,6 @@ products:
       wafer_min: 1
       wafer_max: 99
 
-products:
   WS0712:
     enabled: true
     naming:
@@ -90,3 +107,5 @@ products:
       wafer_required: true
       wafer_min: 1
       wafer_max: 99
+    automation:
+      test_stage: CP
