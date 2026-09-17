@@ -112,6 +112,8 @@ def extract_lot_wafer_pairs_sorted(folder_path):
         if not f.endswith('.csv'): 
             continue
         parts = f.split('_')
+        if len(parts) >= 3 and re.fullmatch(r'W\d+', parts[2]):
+            lot_wafer_pairs.add((parts[1], parts[2][1:]))
         if len(parts) >= 3 and '#' in parts[2]:
             lot_id = parts[1]
             wafer_part = parts[2]
@@ -195,7 +197,8 @@ def process_folder_to_excel_map_combine(folder_path, selected_columns):
             processed_count = 0
             for lot_id, wafer_num in lot_wafer_pairs:
                 search_pattern = f'_{lot_id}_{wafer_num}#'
-                matching_files = [f for f in csv_files if search_pattern in f]
+                cleaned_pattern = f'_{lot_id}_W{wafer_num}_summary_cleaning.csv'
+                matching_files = [f for f in csv_files if search_pattern in f or f.endswith(cleaned_pattern)]
                 if not matching_files: 
                     print(f"警告: 未找到匹配文件 for {lot_id}_W{wafer_num}")
                     continue

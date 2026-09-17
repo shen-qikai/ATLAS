@@ -6,6 +6,154 @@ The version format follows:
 
 MAJOR.MINOR.PATCH
 
+## [v1.10.0] - 2026-09-17
+
+### Added
+
+- High-resolution save dialogs for BIN Map, Test Map and Probability: select a
+  parent directory and enter a memorable folder name, defaulting to `plots/<kind>`.
+- Task history indexes custom save locations, including folders outside the
+  product directory; old `tasks/.../v001` archives remain readable. New GUI saves
+  place images directly in the chosen folder, with no extra permanent task copy.
+- Identical saves reuse their folder; saving identical plots to another location
+  copies the existing high-resolution output without rendering again.
+
+### Changed
+
+- BIN Map product/Lot/Wafer labels use an above-wafer title, wrapping long labels
+  instead of covering the wafer. Existing BIN colors and calculations are unchanged.
+- Cache log wording explicitly distinguishes cumulative CSV reads from in-memory
+  data reuse. Draft preview paths and naming remain unchanged.
+- Synthetic plotting/export tests and hidden UI checks cover named save, external
+  viewing/history, cancellation, reuse, collisions and above-wafer title placement.
+
+## [v1.9.0] - 2026-09-17
+
+### Added
+
+- Automatic, same-Wafer input rename matching using full SHA256 and unchanged
+  initial/retest identity; requires a unique whole-input-set bijection. Execution
+  recalculates that Wafer so cleaned `source_file` provenance uses current paths.
+- Read-only selected-Wafer replacement preview with old/new paths, sizes, SHA256,
+  input counts and run labels; explicit complete-set acknowledgement and reason.
+- Content/config/previous-state/archive-bound approvals that only recalculate
+  selected Wafers, expire on any relevant change, and cannot override naming errors,
+  unprepared archives, CSV validation or an empty current input set.
+- Atomic Wafer/file/archive/audit publication, per-change prior cleaned/metric
+  backups under `.atlas/input_history/`, and rollback of newly published cleaned
+  output if audit/database publication fails.
+- Synthetic coverage and hidden UI checks for migration, intentional reductions,
+  approval expiry, selected-only execution, archive provenance, rollback and cancellation.
+
+### Changed
+
+- Registered prepared CSV corrections now update the affected Wafer rather than
+  blocking unrelated data: same-content aliases retain original archive-member
+  identities, corrected/removed members are retired without altering the original
+  archive fingerprint or pretending corrected CSVs came from that archive.
+- Replacement previews always hash selected files. Normal UI execution strictly
+  rechecks changes already discovered by its scan, even with the global full-hash
+  option off. Unchanged normal runs keep their existing fast path.
+- Default missing-input protection and the force-mode restriction remain; no raw
+  data is renamed/deleted, no company data is added to the repository.
+
+## [v1.8.0] - 2026-09-17
+
+### Added
+
+- Named, product-specific analysis tasks for BIN Map, Test Map and Probability,
+  with a single replaceable draft and a reusable in-app image viewer.
+- Explicit 300 DPI saved versions (`v001`, `v002`, ...), immutable archives,
+  identical-save reuse, a latest-version pointer, and history selection/parameter restoration.
+- A bounded 64 MiB probability calculation cache keyed by test/specification,
+  grouping and the complete selected Wafer fingerprint set. Overlapping Lot
+  comparisons reuse unchanged curves without sampling or averaging Wafer distributions.
+- Synthetic tests for draft publication/rollback, stale/changed inputs, archive
+  integrity, multiple range output, calculation reuse, and hidden UI workflows.
+
+### Changed
+
+- Plot buttons now update 90 DPI previews without creating an archive each time.
+  Explicit save re-renders at 300 DPI from the same full valid population.
+- Probability X-axis modes are multi-select: automatic axis range, specification
+  lock and manual range. Each produces its own images and 2×2 pages; the existing
+  specification padding/fallback behavior is unchanged.
+- Managed drafts and saved versions detect modified/unregistered files rather
+  than silently replacing them. Changed data or parameters require a new preview.
+- Existing legacy plot folders, CSV cleaning and yield report behavior are preserved.
+
+## [v1.7.1] - 2026-09-17
+
+### Changed
+
+- Centered all cells in the three automated Excel reports and supporting sheets.
+- Fit column widths to formatted display values across every row, using font
+  measurements for Chinese/Latin text rather than a fixed 14–32 character range.
+  Kept numeric precision and metrics unchanged; compacted header/default row heights.
+- Removed the fixed explanation-column width. Exceptionally long content wraps
+  at Excel's maximum column width with adjusted row heights.
+- Documented expected-die count configuration and cache-only report regeneration.
+
+## [v1.7.0] - 2026-09-17
+
+### Added
+
+- Read-only archive/cleanup preview before explicitly confirmed preparation;
+  preview records nested paths and detects stale inventory/content before execution.
+- Recursive ZIP/GZ discovery under Lot, flat CSV publication directly into Lot,
+  and recoverable removal of original archives and other formats into the product's
+  `.atlas/ingest_backups/<run_id>/`. Generated output/cache directories are protected.
+- Migration of active registered legacy imports to flat layout, with historical
+  import files backed up rather than reused as current inputs.
+- Synthetic coverage for nested folders, flat processing/plotting, backups, stale
+  preview, collisions, rollback, legacy migration and asynchronous UI steps.
+
+### Changed
+
+- Split CSV preparation and identity/yield processing into two labeled button groups
+  and separate preview tables. Preparation requires preview and confirmation.
+- Same-name identical CSVs share one flat file; differing contents block the Lot,
+  rather than silently overwriting or mixing inputs.
+- Registered flat CSVs remain valid after original archives move into backup.
+  CLI adds `--preview-archives` and requires explicit preparation cleanup approval.
+
+## [v1.6.0] - 2026-09-17
+
+### Added
+
+- Added a CSV preparation step for ZIP and single-file CSV GZ, independent of YAML
+  identity rules. Original archives stay untouched; non-CSV members are not extracted.
+- Added incremental archive manifests, per-bundle output isolation, safe temporary
+  preparation, provenance and retry logging. Invalid/unprepared archives block their Lot.
+- Shared processing/plot inventory reads registered imported CSVs, handles identical
+  same-name duplicates, and detects archive/member changes. Updated archive contents
+  replace complete prior bundles without discarding registered CSV members.
+- Unmatched CSVs are visible as pending confirmation; explicit ignore/restore keeps
+  files and stores content-specific confirmation in the product cache.
+
+### Changed
+
+- Commented out the four legacy tabs/imports/UI calls in main rather than deleting
+  their modules. Main now has cleaning/yield summary and three direct plotting pages.
+- Renamed the pipeline page to 数据清洗与良率汇总 and increased Log from 9 to 23
+  text rows (approximately 2.5x), with a draggable vertical divider.
+- Extended raw-data ignore rules to compressed archives and STD/STDF files.
+
+## [v1.5.0] - 2026-09-17
+
+### Changed
+
+- The automated workflow reads vendor filenames directly without renaming raw CSVs;
+  manual normalization is clearly marked as optional in the UI.
+- Unified cleaned output names as `Product_Lot_W01_summary_cleaning.csv`. Existing
+  demo outputs with different names are recomputed on the next incremental run,
+  rather than permanently retaining legacy output names.
+- After successful registration, unchanged registered old outputs are archived under
+  `.atlas/retired_cleaned/`; modified old files and unregistered target files are not
+  overwritten. Preview remains read-only, and plot selection detects pending naming updates.
+- Updated optional legacy report/export readers for the W01 naming format and added
+  synthetic naming, provenance, migration and collision tests.
+
 ## [v1.4.0] - 2026-09-16
 
 ### Changed

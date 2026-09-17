@@ -1,9 +1,14 @@
 """Three Excel projections of cached Wafer metrics, never of historical raw CSVs."""
 
+from functools import lru_cache
+import math
 import os
 from pathlib import Path
 import shutil
 import tempfile
+import unicodedata
+
+from PIL import ImageFont
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -27,16 +32,78 @@ def _common(record):
     ]
 
 
+@lru_cache(maxsize=8)
+def _sizing_font(points, bold=False, normal=False):
+    """Use actual Windows fonts when available; no Excel process is required."""
+    fonts = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
+    filename = "calibri.ttf" if normal else ("msyhbd.ttc" if bold else "msyh.ttc")
+    try:
+        return ImageFont.truetype(str(fonts / filename), round(points * 96 / 72),
+                                  layout_engine=ImageFont.Layout.BASIC)
+    except (OSError, AttributeError):
+        return None
+
+
+def _display_text(cell):
+    """Measure displayed precision, not Python's full float representation."""
+    value = cell.value
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if cell.number_format == "0.00%":
+            return f"{value:.2%}"
+        if cell.number_format == "0.000000":
+            return f"{value:.6f}"
+        if cell.number_format == "0":
+            return f"{value:.0f}"
+    return str(value)
+
+
+@lru_cache(maxsize=8192)
+def _text_pixels(text, points=10, bold=False):
+    font = _sizing_font(points, bold)
+    if font is not None:
+        return max((font.getlength(line) for line in text.split("\n")), default=0)
+    # Chinese/full-width characters need more room than Latin characters.
+    return max((sum(2 if unicodedata.east_asian_width(ch) in "WF" else 1 for ch in line)
+                * points * 96 / 72 * 0.55 for line in text.split("\n")), default=0)
+
+
+def _fit_columns(sheet):
+    normal = _sizing_font(11, normal=True)
+    digit_width = normal.getlength("0") if normal is not None else 7
+    for index, column in enumerate(sheet.iter_cols(), start=1):
+        widths = [_text_pixels(_display_text(cell), cell.font.sz or 11, bool(cell.font.bold))
+                  for cell in column]
+        pixels = max(widths, default=0)
+        width = max(1, math.ceil((pixels + 6) / digit_width * 256) / 256)
+        sheet.column_dimensions[get_column_letter(index)].width = min(255, width)
+        # Excel has a maximum column width. Wrap only those exceptional long cells.
+        for cell, cell_width in zip(column, widths):
+            text = _display_text(cell)
+            available = 255 * digit_width - 6
+            if (width > 255 and cell_width > available) or "\n" in text:
+                lines = sum(max(1, math.ceil(_text_pixels(
+                    line, cell.font.sz or 11, bool(cell.font.bold)) / available))
+                    for line in text.split("\n"))
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                height = max(15, (cell.font.sz or 11) * 1.5) * max(1, lines)
+                sheet.row_dimensions[cell.row].height = min(409, max(
+                    sheet.row_dimensions[cell.row].height or sheet.sheet_format.defaultRowHeight or 15,
+                    height))
+
+
 def _style(sheet, data_start=2, percent_columns=(), numeric_columns=()):
     sheet.freeze_panes = f"D{data_start}"
+    sheet.sheet_format.defaultRowHeight = 15
     for cell in sheet[1]:
-        cell.font = Font(name="Microsoft YaHei", bold=True, color="FFFFFF")
+        cell.font = Font(name="Microsoft YaHei", size=11, bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="235789")
         cell.alignment = Alignment(horizontal="center", vertical="center")
     for row in sheet.iter_rows(min_row=2):
         for cell in row:
             cell.font = Font(name="Microsoft YaHei", size=10)
-            cell.alignment = Alignment(vertical="center")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
             if cell.row < data_start:
                 cell.fill = PatternFill("solid", fgColor="E5EDF5")
             elif cell.row % 2 == 0:
@@ -48,10 +115,8 @@ def _style(sheet, data_start=2, percent_columns=(), numeric_columns=()):
                     cell.number_format = "0.000000"
                 else:
                     cell.number_format = "0"
-    for index, column in enumerate(sheet.iter_cols(max_row=min(sheet.max_row, 40)), start=1):
-        length = max((len(str(cell.value)) if cell.value is not None else 0 for cell in column), default=10)
-        sheet.column_dimensions[get_column_letter(index)].width = min(32, max(14, length + 3))
-    sheet.row_dimensions[1].height = 25
+    sheet.row_dimensions[1].height = 20
+    _fit_columns(sheet)
     if data_start == 2:
         sheet.auto_filter.ref = sheet.dimensions
 
@@ -108,7 +173,6 @@ def _extra_sheets(book, records, scan_errors, with_specs=False):
     info.append(["测试项平均值", "所有有效有限数值的均值；文本列或无有效数据为 NA"])
     info.append(["规格变更", "不同规格保留独立版本；主表元信息冲突时请查测试项规格 Sheet"])
     _style(info)
-    info.column_dimensions["B"].width = 105
 
 
 def _bin_book(current, all_records, scan_errors):

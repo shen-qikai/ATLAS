@@ -47,6 +47,13 @@ ATLAS_DATA/
 *.xlsx
 *.xls
 *.xlsm
+*.zip
+*.gz
+*.tar
+*.7z
+*.rar
+*.std
+*.stdf
 
 # Generated outputs
 output/

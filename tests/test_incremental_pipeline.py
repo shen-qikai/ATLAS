@@ -225,7 +225,7 @@ class PipelineIntegrationTests(unittest.TestCase):
         row, headers, columns = app.process_single_avg_file((cleaned.name, str(cleaned.parent)))
         self.assertEqual(row["VOUT"], 7)
         self.assertEqual(row["Lot_WaferID"], "LOT001_W01")
-        self.assertEqual(extract_lot_wafer_name(cleaned.name), "LOT001_W1")
+        self.assertEqual(extract_lot_wafer_name(cleaned.name), "LOT001_W01")
 
     def test_unchanged_run_does_not_recalculate_or_rewrite_reports(self):
         self._write_csv()

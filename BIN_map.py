@@ -12,6 +12,7 @@ from PIL import Image
 import shutil
 import sys
 import threading
+import textwrap
 import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext, messagebox
 
@@ -180,7 +181,8 @@ def create_wafer_map_pcolormesh(df, ax=None, wafer_number=None, notch_direction=
             if mode == 2 and not isinstance(specific_bin, list) and specific_bin:
                 title_text += f'_BIN{specific_bin}'
             
-            ax.text(0.02, 0.98, title_text, transform=ax.transAxes, fontsize=base_fs, fontweight='bold', ha='left', va='top')
+            ax.set_title(textwrap.fill(title_text, width=60, break_on_hyphens=False),
+                         fontsize=base_fs, fontweight='bold', pad=10)
             
             total_points = len(df_rotated)
             if mode == 2:
@@ -213,7 +215,7 @@ def calculate_lot_statistics(wafer_data, mode, specific_bin=None):
             target_points += (df['SOFT_BIN'] == 1).sum()
     return (target_points / total_points * 100) if total_points > 0 else 0
 
-def create_composite_map_pcolormesh(wafer_data, folder_path, excel_file, notch_direction=6, mode=1, specific_bin=None, temp_folder=None, sort_method="alphabetical", manual_order=""):
+def create_composite_map_pcolormesh(wafer_data, folder_path, excel_file, notch_direction=6, mode=1, specific_bin=None, temp_folder=None, sort_method="alphabetical", manual_order="", output_dpi=300):
     lot_stat = calculate_lot_statistics(wafer_data, mode, specific_bin)
     excel_base = os.path.splitext(excel_file)[0]
     suffix = get_mode_suffix(mode, specific_bin)
@@ -222,7 +224,7 @@ def create_composite_map_pcolormesh(wafer_data, folder_path, excel_file, notch_d
     
     if num_wafers == 0: return
     
-    target_dpi = 300
+    target_dpi = output_dpi
     first_img_path = None
     for wafer_id in sorted_wafer_ids:
         fpath = os.path.join(temp_folder, f"{excel_base}_W{wafer_id}_temp.png")
@@ -572,7 +574,7 @@ class BinMapApp:
             sys.stdout = original_stdout
             self.parent.after(0, lambda: self.run_btn.config(state='normal'))
     
-    def create_combined_maps(self, wafer_data, folder_path, excel_file, notch_dir, tasks, mode_output_dirs, sort_method, manual_order, strict=False):
+    def create_combined_maps(self, wafer_data, folder_path, excel_file, notch_dir, tasks, mode_output_dirs, sort_method, manual_order, strict=False, output_dpi=300):
         try:
             mode_names = {0: "多彩", 1: "BIN1绿", 2: "BIN高亮"}
             excel_base = os.path.splitext(excel_file)[0]
@@ -599,7 +601,7 @@ class BinMapApp:
                         axes[i].imshow(img); axes[i].set_title(title, fontsize=14, fontweight='bold', pad=20); axes[i].axis('off')
                     fig.suptitle(f" ", fontsize=16, fontweight='bold', y=0.98)
                     plt.tight_layout()
-                    plt.savefig(os.path.join(bin_maps_dir, f"{excel_base}_W{safe_wafer_id}_notch{notch_dir}_combined_subplots.png"), dpi=300, bbox_inches='tight')
+                    plt.savefig(os.path.join(bin_maps_dir, f"{excel_base}_W{safe_wafer_id}_notch{notch_dir}_combined_subplots.png"), dpi=output_dpi, bbox_inches='tight')
                     plt.close()
             
             mode_composite_images, mode_composite_titles = [], []
@@ -621,7 +623,7 @@ class BinMapApp:
                     axes[i].imshow(img); axes[i].set_title(title, fontsize=20, fontweight='bold'); axes[i].axis('off')
                 fig.suptitle(f"多模式整图拼接", fontsize=28, fontweight='bold', y=0.95)
                 plt.tight_layout()
-                plt.savefig(os.path.join(bin_maps_dir, f"{excel_base}_notch{notch_dir}_combined_composites.png"), dpi=300, bbox_inches='tight')
+                plt.savefig(os.path.join(bin_maps_dir, f"{excel_base}_notch{notch_dir}_combined_composites.png"), dpi=output_dpi, bbox_inches='tight')
                 plt.close()
         except Exception as e:
             if strict:

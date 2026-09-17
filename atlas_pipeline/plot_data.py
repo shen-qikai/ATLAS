@@ -4,15 +4,16 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
-import re
 import threading
 
 import numpy as np
 import pandas as pd
 
 from .config import PipelineProfile, load_pipeline_profiles
-from .pipeline import GENERATED_FOLDERS, _inside, file_hash, parse_filename, scan_root, resolve_wafer_identity
+from .pipeline import (_inside, cleaned_relative_path, file_hash,
+                       parse_filename, resolve_wafer_identity, scan_root)
 from .state import read_snapshot
+from .archives import discover_csvs, is_ignored, lot_folders
 
 
 @dataclass(frozen=True)
@@ -54,19 +55,18 @@ class PlotCatalog:
     errors: list[str] = field(default_factory=list)
 
 
-def _inventory(folder, profile, snapshot):
-    """Names/stat only: catalog refresh never parses/hashes historical CSV contents."""
+def _inventory(folder, profile, snapshot, verify_hashes=False, selected_lots=None):
+    """No CSV parsing; only duplicate/ignored files require hashes on ordinary refresh."""
     groups, blocked = {}, {}
-    for lot in sorted(folder.iterdir(), key=lambda p: p.name.casefold()):
-        if not lot.is_dir() or lot.name.startswith(".") or lot.name.casefold() in GENERATED_FOLDERS:
-            continue
-        _inside(lot, folder)
-        for source in sorted(lot.iterdir(), key=lambda p: p.name.casefold()):
-            if not source.is_file() or source.suffix.lower() != ".csv":
-                continue
-            if re.search(r"_(summary(?:_cleaning)?|onlydata)\.csv$", source.name, re.I):
-                continue
+    for lot in lot_folders(folder):
+        verify_lot = verify_hashes and (selected_lots is None or lot.name in selected_lots)
+        sources, errors = discover_csvs(folder, lot, snapshot, verify=verify_lot)
+        if errors:
+            blocked[lot.name] = errors
+        for source in sources:
             try:
+                if is_ignored(source, folder, snapshot):
+                    continue
                 _inside(source, folder)
                 parsed_lot, wafer = parse_filename(source.name, profile)
                 if parsed_lot.casefold() != lot.name.casefold():
@@ -87,6 +87,8 @@ def _record_status(folder, profile, record, key, snapshot, groups, blocked):
         return record.get("status", "unprocessed"), record.get("error", "请先运行增量处理")
     if record.get("profile_signature") != profile.signature:
         return "stale", "产品配置已变化，请先运行增量处理"
+    if record.get("cleaned_path") != cleaned_relative_path(folder.name, record["lot"], record["wafer"]).as_posix():
+        return "stale", "清理输出命名待统一，请先运行增量处理"
     sources = groups.get(key, {})
     if not sources:
         return "missing", "原始输入缺失或数据标识已变化"
@@ -144,7 +146,7 @@ class PlotDataService:
                     lot, wafer, stage = json.loads(key)
                     catalog.wafers.append(WaferRef(product.folder, product.category, key, product.profile,
                                                    {"lot": lot, "wafer": wafer, "stage": stage},
-                                                   "unprocessed", "请先运行自动增量良率"))
+                                                   "unprocessed", "请先运行数据清洗与良率汇总"))
                 catalog.errors.extend(f"{product.folder.name}/{lot}: {'; '.join(errors)}"
                                       for lot, errors in blocked.items())
             except (OSError, ValueError, RuntimeError) as exc:
@@ -166,7 +168,8 @@ class PlotDataService:
         if not profile or not profile.enabled:
             raise ValueError("产品已禁用或配置已移除")
         snapshot = read_snapshot(folder)
-        groups, blocked = _inventory(folder, profile, snapshot)
+        groups, blocked = _inventory(folder, profile, snapshot, verify_hashes,
+                                     {ref.record["lot"] for ref in refs})
         for ref in refs:
             record = snapshot["wafers"].get(ref.key)
             if not record or not ref.available:
