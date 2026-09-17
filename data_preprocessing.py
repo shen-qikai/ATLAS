@@ -84,6 +84,9 @@ class DataPreprocessingGUI:
         ttk.Label(top_frame, textvariable=self.scan_summary_var).grid(
             row=1, column=0, columnspan=3, sticky=tk.W, pady=(5, 0)
         )
+        ttk.Label(top_frame, text="自动增量良率可直接读取厂商原名；这里的改名是可选操作，会修改原始文件名。").grid(
+            row=2, column=0, columnspan=5, sticky=tk.W, pady=(5, 0)
+        )
 
         main_container = ttk.Panedwindow(self.parent, orient=tk.HORIZONTAL)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)

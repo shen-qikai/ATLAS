@@ -57,7 +57,8 @@ class ProbabilityLogic:
     def inverse(self, y):
         return stats.norm.cdf(y)
 
-    def create_overlay_probability_plot(self, df, sheet_name, output_path=None, x_range=None, lsl=None, usl=None, unit="", highlight_columns=None, marker_size=5):
+    def create_overlay_probability_plot(self, df, sheet_name, output_path=None, x_range=None, lsl=None, usl=None, unit="", highlight_columns=None, marker_size=5,
+                                        dpi=300, prepared_curves=None):
         try:
             if df.empty: return False
             df = df.dropna(axis=1, how='all')
@@ -88,8 +89,13 @@ class ProbabilityLogic:
                     if n < 1: continue
                     
                     valid_columns_count += 1
-                    sorted_data = np.sort(data.values)
-                    cdf = (np.arange(1, n + 1) - 0.3) / (n + 0.4)
+                    if prepared_curves is not None and column_name in prepared_curves:
+                        sorted_data, cdf = prepared_curves[column_name]
+                        if len(sorted_data) != n or len(cdf) != n:
+                            raise ValueError("概率曲线缓存与实际数据数量不一致")
+                    else:
+                        sorted_data = np.sort(data.values)
+                        cdf = (np.arange(1, n + 1) - 0.3) / (n + 0.4)
                     
                     marker_idx = (valid_columns_count - 1) // n_colors
                     color_idx = (valid_columns_count - 1) % n_colors
@@ -160,7 +166,7 @@ class ProbabilityLogic:
             if x_range: ax.set_xlim(x_range[0], x_range[1])
             plt.tight_layout()
             
-            if output_path: plt.savefig(output_path, dpi=300, bbox_inches='tight')
+            if output_path: plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
             plt.close()
             return True
         except Exception as e:

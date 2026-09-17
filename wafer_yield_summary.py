@@ -379,6 +379,8 @@ class WaferYieldSummaryApp:
             raise ValueError(f"文件名 '{f}' 格式不符合 前缀_LotID_WaferID_后缀，下划线分段不足3段: {parts}")
 
         # Wafer ID 去#再转整数格式化为 WXX（如 _05#_ → W05）
+        if wafer_str.startswith('W') and wafer_str[1:].isdigit():
+            wafer_str = wafer_str[1:]
         wafer_str = wafer_str.replace('#', '')
         try:
             wafer_num = str(int(float(wafer_str))).zfill(2)

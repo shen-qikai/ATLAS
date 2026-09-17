@@ -134,7 +134,7 @@ def parse_csv(path: Path, profile: PipelineProfile) -> ParsedCsv:
     return ParsedCsv(path, columns, metadata, data, end_time, retest_run(path.name))
 
 
-def merge_and_clean(paths: list[Path], profile: PipelineProfile) -> CleanedWafer:
+def merge_and_clean(paths: list[Path], profile: PipelineProfile, source_root: Path | None = None) -> CleanedWafer:
     parsed = [parse_csv(path, profile) for path in paths]
     if not parsed:
         raise ValueError("Wafer 没有输入文件")
@@ -176,9 +176,11 @@ def merge_and_clean(paths: list[Path], profile: PipelineProfile) -> CleanedWafer
                         raise ValueError("同一测试轮次的文件坐标重叠且时间顺序不明确，不能猜测最终记录")
 
     frames = []
+    source_names = {source.path: source.path.relative_to(source_root).as_posix() if source_root else source.path.name
+                    for source in parsed}
     for source in parsed:
         frame = source.data.copy()
-        frame["source_file"] = source.path.name
+        frame["source_file"] = source_names[source.path]
         frame["ending_time"] = source.ending_time.isoformat(sep=" ") if source.ending_time else ""
         frames.append(frame)
     merged = pd.concat(frames, ignore_index=True)
@@ -187,7 +189,7 @@ def merge_and_clean(paths: list[Path], profile: PipelineProfile) -> CleanedWafer
         merged = merged.drop_duplicates([profile.x_column, profile.y_column], keep="last")
     elif any(source.retest_run for source in parsed):
         # Same rule as merge_cleaning: retain every RT record and initial-test passes.
-        rt_names = {source.path.name for source in parsed if source.retest_run}
+        rt_names = {source_names[source.path] for source in parsed if source.retest_run}
         initial_pass = ~merged[profile.pass_fail_column].str.strip().str.upper().isin(FAIL_TOKENS)
         merged = merged[merged["source_file"].isin(rt_names) | initial_pass]
     if merged.empty:

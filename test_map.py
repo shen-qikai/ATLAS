@@ -146,19 +146,19 @@ def plot_wafer(ax, df, val_col, title, meta, mode, g_val, r_val, notch_dir, show
     return mesh
 
 # ========== 单图保存 ==========
-def save_single_map(df, col, wid, out_dir, fname, meta, mode, g_val, r_val, notch_dir):
+def save_single_map(df, col, wid, out_dir, fname, meta, mode, g_val, r_val, notch_dir, output_dpi=300):
     fig, ax = plt.subplots(figsize=(8, 8))
     unit = f"({meta.get('unit','')})" if meta.get('unit') else ""
     title = f"{col} {unit} {wid}"
     plot_wafer(ax, df, col, title, meta, mode, g_val, r_val, notch_dir, show_cbar=(mode != 'pass_fail'))
     safe = safe_name(wid)
     plt.savefig(os.path.join(out_dir, f"{os.path.splitext(fname)[0]}_{safe_name(col)}_{safe}_notch{notch_dir}_{mode}.png"),
-                dpi=300, bbox_inches='tight')
+                dpi=output_dpi, bbox_inches='tight')
     plt.close()
 
 # ========== 整合图 ==========
 def save_composite(wafer_dict, col, out_dir, fname, metas, mode, g_val, r_val, notch_dir, sort_meth, manual_ord,
-                   display_labels=None):
+                   display_labels=None, output_dpi=300):
     n = len(wafer_dict)
     if n == 0: return
     if sort_meth == 'manual' and manual_ord:
@@ -205,12 +205,12 @@ def save_composite(wafer_dict, col, out_dir, fname, metas, mode, g_val, r_val, n
         cbar = plt.colorbar(mesh, cax=cax)
         cbar.set_label({'auto': 'Global Sigma', 'manual': 'Manual', 'usl_lsl': 'USL/LSL'}.get(mode, ''), fontsize=14)
     plt.savefig(os.path.join(out_dir, f"{os.path.splitext(fname)[0]}_{safe_name(col)}_composite_{r}x{c}_notch{notch_dir}_{mode}.png"),
-                dpi=300, bbox_inches='tight')
+                dpi=output_dpi, bbox_inches='tight')
     plt.close()
 
 # ========== 多模式拼接图 ==========
 def create_combined_maps(wafer_data, test_col, out_base, fname, all_meta, modes_to_combine, 
-                         sort_meth, manual_ord, notch_dir, log_func, display_labels=None, strict=False):
+                         sort_meth, manual_ord, notch_dir, log_func, display_labels=None, strict=False, output_dpi=300):
     mode_names = {'auto': '自动3σ', 'manual': '手动', 'usl_lsl': 'USL/LSL', 'pass_fail': 'Pass/Fail'}
     if len(modes_to_combine) <= 1: return
 
@@ -237,7 +237,7 @@ def create_combined_maps(wafer_data, test_col, out_base, fname, all_meta, modes_
             title = display_labels.get(wid, wid) if display_labels else wid
             fig.suptitle(f"{test_col} {unit} - {title}", fontsize=16, fontweight='bold', y=0.98)
             plt.tight_layout()
-            plt.savefig(os.path.join(out_base, f"{os.path.splitext(fname)[0]}_{safe_name(test_col)}_{safe_name(wid)}_combined_subplots.png"), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(out_base, f"{os.path.splitext(fname)[0]}_{safe_name(test_col)}_{safe_name(wid)}_combined_subplots.png"), dpi=output_dpi, bbox_inches='tight')
             plt.close()
         except Exception as e:
             if strict:
@@ -259,7 +259,7 @@ def create_combined_maps(wafer_data, test_col, out_base, fname, all_meta, modes_
             unit = f"({next(iter(all_meta.values())).get('unit','')})" if all_meta else ""
             fig.suptitle(f"{test_col} {unit}", fontsize=28, fontweight='bold', y=0.95)
             plt.tight_layout()
-            plt.savefig(os.path.join(out_base, f"{os.path.splitext(fname)[0]}_{safe_name(test_col)}_combined_composites.png"), dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(out_base, f"{os.path.splitext(fname)[0]}_{safe_name(test_col)}_combined_composites.png"), dpi=output_dpi, bbox_inches='tight')
             plt.close()
     except Exception as e:
         if strict:

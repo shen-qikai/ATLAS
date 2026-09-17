@@ -7,6 +7,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+import pandas as pd
 from matplotlib.figure import Figure
 from PIL import Image
 
@@ -155,6 +156,22 @@ class DirectPlotTests(unittest.TestCase):
         self.assertEqual(numeric_frame(frame)["A"].dropna().tolist(), [2])
         self.assertEqual(numeric_frame(frame, strip_markers=True)["A"].dropna().tolist(), [2, 3, 4])
 
+    def test_bin_identity_title_stays_above_wafer_for_long_labels(self):
+        from BIN_map import plt, create_wafer_map_pcolormesh
+        frame = pd.DataFrame({"X_COORD": [0, 0, 1, 1], "Y_COORD": [0, 1, 0, 1], "SOFT_BIN": [1, 1, 1, 9]})
+        label = "LONG_PRODUCT_NAME_" + "LOT_" * 18 + "W01"
+        for small in (False, True):
+            fig, ax = plt.subplots(figsize=(8, 8))
+            try:
+                create_wafer_map_pcolormesh(frame, ax, label, small_font=small, strict=True)
+                fig.canvas.draw()
+                title = ax.title.get_window_extent(fig.canvas.get_renderer())
+                self.assertGreaterEqual(title.y0, ax.get_window_extent().y1)
+                self.assertEqual(ax.get_title().replace("\n", ""), label)
+                self.assertFalse(any(label in text.get_text() for text in ax.texts))
+            finally:
+                plt.close(fig)
+
     def test_bin_task_parser_and_safe_filenames(self):
         self.assertEqual(parse_bin_tasks(True, True, True, "6,9,6+9,6"),
                          [(0, None), (1, None), (2, 6), (2, 9), (2, [6, 9])])
@@ -175,7 +192,7 @@ class DirectPlotTests(unittest.TestCase):
         refs = self._two_lots()
         from probability import ProbabilityLogic
         captured = []
-        def capture(logic, frame, name, path, *args):
+        def capture(logic, frame, name, path, *args, **kwargs):
             captured.append((frame, args))
             Image.new("RGB", (20, 20), "white").save(path)
             return True
@@ -327,7 +344,7 @@ class DirectPlotTests(unittest.TestCase):
 
     def test_strict_stitching_error_is_not_marked_complete(self):
         from probability import ProbabilityLogic
-        def capture(logic, frame, name, path, *args):
+        def capture(logic, frame, name, path, *args, **kwargs):
             Image.new("RGB", (20, 20)).save(path)
             return True
         with patch.object(ProbabilityLogic, "create_overlay_probability_plot", capture), \

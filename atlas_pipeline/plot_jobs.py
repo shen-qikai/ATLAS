@@ -15,6 +15,7 @@ import pandas as pd
 
 from .pipeline import _inside
 from .plot_data import numeric_frame
+from .curve_cache import PROBABILITY_CURVES
 
 
 # Matplotlib's global pyplot state must not be used by simultaneous tab workers.
@@ -74,6 +75,12 @@ class PlotOptions:
     sort_method: str = "alphabetical"
     manual_order: str = ""
     verify_hashes: bool = False
+    output_dpi: int = 300
+    x_modes: list[str] | None = None
+
+
+def probability_modes(options):
+    return options.x_modes if options.x_modes is not None else [options.x_mode]
 
 
 @dataclass
@@ -88,6 +95,8 @@ def validate_options(options, refs):
         raise ValueError("不支持的绘图类型")
     if not refs or len({ref.token for ref in refs}) != len(refs):
         raise ValueError("请选择 Wafer，且同片不能重复选择")
+    if options.output_dpi not in (90, 300):
+        raise ValueError("绘图分辨率只能为预览90或正式300 DPI")
     if options.kind != "bin":
         available = {test for ref in refs for test in ref.tests}
         if not options.tests or any(test not in available for test in options.tests):
@@ -99,11 +108,14 @@ def validate_options(options, refs):
                 and all(isinstance(v, (int, float)) and math.isfinite(v) for v in values)
                 and values[0] < values[1])
     if options.kind == "probability":
-        if options.x_mode not in ("auto", "spec", "manual") or options.grouping not in ("wafer", "lot"):
+        selected_modes = probability_modes(options)
+        if (not selected_modes or len(set(selected_modes)) != len(selected_modes)
+                or any(mode not in ("auto", "spec", "manual") for mode in selected_modes)
+                or options.grouping not in ("wafer", "lot")):
             raise ValueError("概率图范围或分组模式无效")
         if type(options.marker_size) is not int or not 1 <= options.marker_size <= 15:
             raise ValueError("数据点大小必须为 1–15")
-        if options.x_mode == "manual" and not valid_range(options.x_range):
+        if "manual" in selected_modes and not valid_range(options.x_range):
             raise ValueError("手动范围必须是有限数值，且 min < max")
     else:
         if options.notch not in (6, 9, 12, 3) or options.sort_method not in ("alphabetical", "manual"):
@@ -172,42 +184,54 @@ def _spec_groups(loaded, test, log):
 def _render_probability(loaded, output, options, log):
     from probability import ProbabilityLogic
     logic = ProbabilityLogic(log)
-    generated = []
+    generated = {mode: [] for mode in probability_modes(options)}
     if options.grouping == "lot":
         log("按 Lot 合并 die 分布；这会隐藏片间差异，且按每片实际有效测试值数贡献数据")
+    before = PROBABILITY_CURVES.computations, PROBABILITY_CURVES.hits
     for test in options.tests:
         for index, group in enumerate(_spec_groups(loaded, test, log), 1):
             series, highlight = {}, []
-            highlights = options.highlight_tokens
             for ref, frame, _ in group:
-                values = numeric_frame(frame[[test]])[test].dropna().reset_index(drop=True)
-                if values.empty:
-                    log(f"{ref.label}/{test}: 没有有效数值，未参与此图")
-                    continue
                 role = "参考" if ref.token in options.reference_tokens else "分析"
                 label = ref.label if options.grouping == "wafer" else f"{ref.folder.name}_{ref.record['lot']}_{role}"
-                series.setdefault(label, []).append(values)
-                if highlights is not None and ref.token in highlights:
+                series.setdefault(label, []).append((ref, frame[test]))
+                if options.highlight_tokens is not None and ref.token in options.highlight_tokens:
                     highlight.append(label)
-            frame = pd.DataFrame({name: pd.concat(values, ignore_index=True) for name, values in series.items()})
-            if frame.empty:
-                continue
+            curves = {}
             spec = group[0][2]
-            limits = options.x_range if options.x_mode == "manual" else None
-            if options.x_mode == "spec" and spec["lsl"] is not None and spec["usl"] is not None and spec["usl"] > spec["lsl"]:
-                pad = (spec["usl"] - spec["lsl"]) / 0.9 * 0.05
-                limits = [spec["lsl"] - pad, spec["usl"] + pad]
-            name = f"{options.x_mode}_{safe_name(test)}_spec{index}_prob.png"
-            path = output / name
-            if not logic.create_overlay_probability_plot(frame, test, path, limits,
-                                                         spec["lsl"], spec["usl"], spec["unit"],
-                                                         list(dict.fromkeys(highlight)) if highlights is not None else None,
-                                                         options.marker_size):
-                raise RuntimeError(f"概率图生成失败: {test}")
-            generated.append(path)
-            log(f"已生成 {name}（{len(series)} 条曲线）")
-    if generated:
-        logic.stitch_images_2x2(generated, output, "selected", options.x_mode, strict=True)
+            for label, blocks in series.items():
+                # Exact selected-member set is part of the key, including partial Lots.
+                key = (test, options.grouping, spec["unit"], spec["lsl"], spec["usl"],
+                       tuple(sorted((ref.token, ref.record["cleaned_sha256"]) for ref, _ in blocks)))
+                curve = PROBABILITY_CURVES.curve(key, [column for _, column in blocks])
+                if len(curve[0]):
+                    curves[label] = curve
+                else:
+                    log(f"{label}/{test}: 没有有效数值，未参与此图")
+            if not curves:
+                continue
+            frame = pd.DataFrame({label: pd.Series(curve[0]) for label, curve in curves.items()})
+            for mode in generated:
+                limits = options.x_range if mode == "manual" else None
+                if mode == "spec":
+                    if spec["lsl"] is not None and spec["usl"] is not None and spec["usl"] > spec["lsl"]:
+                        pad = (spec["usl"] - spec["lsl"]) / 0.9 * 0.05
+                        limits = [spec["lsl"] - pad, spec["usl"] + pad]
+                    else:
+                        log(f"{test}/规格组{index}: 无有效双边规格，规格锁定沿用原逻辑回退为自动范围")
+                name = f"{mode}_{safe_name(test)}_spec{index}_prob.png"
+                path = output / name
+                if not logic.create_overlay_probability_plot(
+                        frame, test, path, limits, spec["lsl"], spec["usl"], spec["unit"],
+                        list(dict.fromkeys(highlight)) if options.highlight_tokens is not None else None,
+                        options.marker_size, dpi=options.output_dpi, prepared_curves=curves):
+                    raise RuntimeError(f"概率图生成失败: {test}/{mode}")
+                generated[mode].append(path)
+                log(f"已生成 {name}（{len(curves)} 条曲线）")
+    for mode, images in generated.items():
+        if images:
+            logic.stitch_images_2x2(images, output, "selected", mode, strict=True)
+    log(f"概率计算缓存：新增 {PROBABILITY_CURVES.computations - before[0]}，复用 {PROBABILITY_CURVES.hits - before[1]}")
 
 
 def _render_bin(loaded, output, options, log):
@@ -235,22 +259,24 @@ def _render_bin(loaded, output, options, log):
                 try:
                     renderer.create_wafer_map_pcolormesh(frame, ax, labels[label], options.notch, mode, bins,
                                                         global_settings=settings, add_legend=False, strict=True)
-                    fig.savefig(Path(temporary) / f"selected_W{label}_temp.png", dpi=300, bbox_inches='tight')
+                    fig.savefig(Path(temporary) / f"selected_W{label}_temp.png", dpi=options.output_dpi, bbox_inches='tight')
                     if mode == 0 and settings['legend_info']:
                         renderer._add_custom_legend(ax, frame, settings['legend_info'])
                     fig.savefig(directory / f"selected_W{label}_notch{options.notch}{renderer.get_mode_suffix(mode, bins)}.png",
-                                dpi=300, bbox_inches='tight')
+                                dpi=options.output_dpi, bbox_inches='tight')
                 finally:
                     renderer.plt.close(fig)
             renderer.create_composite_map_pcolormesh(data, str(directory), "selected", options.notch,
-                                                     mode, bins, temporary, options.sort_method, _manual_order(options))
+                                                     mode, bins, temporary, options.sort_method, _manual_order(options),
+                                                     output_dpi=options.output_dpi)
         log(f"BIN 模式 {mode} / {bins}: {len(data)} 片及整合图已生成")
     tasks = [options.bin_tasks[index] for index in options.combine_bin_indices]
     if len(tasks) > 1:
         # The legacy image-stitching method only uses its explicit arguments;
         # constructing a Tk application in this worker is intentionally avoided.
         renderer.BinMapApp.create_combined_maps(None, data, str(output), "selected", options.notch,
-                                               tasks, dirs, options.sort_method, _manual_order(options), strict=True)
+                                               tasks, dirs, options.sort_method, _manual_order(options), strict=True,
+                                               output_dpi=options.output_dpi)
 
 
 def _render_test(loaded, output, options, log):
@@ -277,19 +303,21 @@ def _render_test(loaded, output, options, log):
                 directory.mkdir()
                 for label, frame in data.items():
                     renderer.save_single_map(frame, test, labels[label], str(directory), "selected", metas[label],
-                                              mode, options.minimum, options.maximum, options.notch)
+                                              mode, options.minimum, options.maximum, options.notch,
+                                              output_dpi=options.output_dpi)
                 renderer.save_composite(data, test, str(directory), "selected", metas, mode,
                                          options.minimum, options.maximum, options.notch,
-                                         options.sort_method, _manual_order(options), display_labels=labels)
+                                         options.sort_method, _manual_order(options), display_labels=labels,
+                                         output_dpi=options.output_dpi)
             combined = [mode for mode in options.combine_modes if mode in options.modes]
             if len(combined) > 1:
                 renderer.create_combined_maps(data, test, str(base), "selected", metas, combined,
                                               options.sort_method, _manual_order(options), options.notch, log,
-                                              display_labels=labels, strict=True)
+                                              display_labels=labels, strict=True, output_dpi=options.output_dpi)
             log(f"{test} / 规格组{index}: {len(data)} 片已生成")
 
 
-def run_plot_job(service, refs, options, log=None):
+def run_plot_job(service, refs, options, log=None, *, output_folder=None, preview=False):
     validate_options(options, refs)
     notes = []
     def emit(message):
@@ -314,11 +342,13 @@ def run_plot_job(service, refs, options, log=None):
         for warning in ref.record.get("metrics", {}).get("warnings", []):
             emit(f"{ref.label}: {warning}")
     folder = refs[0].folder
-    output = folder / "plots" / options.kind / (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8])
+    output = (Path(output_folder) if output_folder is not None else folder / "plots" / options.kind /
+              (datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]))
     _inside(output, folder)
     output.mkdir(parents=True)
     manifest_path = output / "manifest.json"
-    manifest = {"status": "running", "options": asdict(options),
+    manifest = {"status": "running", "options": asdict(options), "purpose": "preview" if preview else "archive",
+                "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                 "inputs": [{"label": ref.label, "key": ref.key, "cleaned_path": ref.record["cleaned_path"],
                             "sha256": ref.record["cleaned_sha256"]} for ref in refs], "notes": notes}
     def save_manifest():

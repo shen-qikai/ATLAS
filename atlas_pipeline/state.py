@@ -12,7 +12,8 @@ SCHEMA_VERSION = "1"
 
 def read_snapshot(product_folder: Path) -> dict:
     database = product_folder / ".atlas" / "state.sqlite"
-    empty = {"wafers": {}, "files": {}, "generation": 0, "report_generation": -1, "scan_errors": []}
+    empty = {"wafers": {}, "files": {}, "archives": {}, "ignored_files": {},
+             "generation": 0, "report_generation": -1, "scan_errors": []}
     if not database.exists():
         return empty
     if product_folder not in database.resolve().parents:
@@ -24,9 +25,14 @@ def read_snapshot(product_folder: Path) -> dict:
             # Keep metadata, Wafer records, and file stamps in one consistent snapshot.
             connection.execute("BEGIN")
             meta = dict(connection.execute("SELECT key, value FROM meta"))
+            tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             if meta.get("schema_version") != SCHEMA_VERSION:
                 raise ValueError("不支持的缓存版本，请勿删除原始数据")
             return {
+                "archives": {key: json.loads(payload) for key, payload in connection.execute(
+                    "SELECT path, payload FROM archives")} if "archives" in tables else {},
+                "ignored_files": {key: json.loads(payload) for key, payload in connection.execute(
+                    "SELECT path, payload FROM ignored_files")} if "ignored_files" in tables else {},
                 "wafers": {
                     key: json.loads(payload)
                     for key, payload in connection.execute("SELECT key, payload FROM wafers")
@@ -62,6 +68,9 @@ class ProductState:
             "CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, size INTEGER, "
             "mtime_ns INTEGER, sha256 TEXT);"
             "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS archives (path TEXT PRIMARY KEY, payload TEXT NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS ignored_files (path TEXT PRIMARY KEY, payload TEXT NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS input_revisions (id TEXT PRIMARY KEY, wafer_key TEXT NOT NULL, payload TEXT NOT NULL);"
         )
         self.connection.execute(
             "INSERT OR IGNORE INTO meta VALUES ('schema_version', ?)", (SCHEMA_VERSION,)
@@ -88,6 +97,37 @@ class ProductState:
                 "INSERT OR REPLACE INTO files VALUES (?, ?, ?, ?)",
                 [(f.relative_path, f.size, f.mtime_ns, f.sha256) for f in files],
             )
+
+    def save_input_revision(self, key, record, files, event, archive_updates):
+        """Publish one Wafer and its provenance/audit under a single transaction."""
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO wafers VALUES (?, ?)",
+                                    (key, json.dumps(record, ensure_ascii=False, allow_nan=False)))
+            self.connection.executemany("INSERT OR REPLACE INTO files VALUES (?, ?, ?, ?)",
+                [(source.relative_path, source.size, source.mtime_ns, source.sha256) for source in files])
+            for path, archive in archive_updates.items():
+                self.connection.execute("INSERT OR REPLACE INTO archives VALUES (?, ?)",
+                    (path, json.dumps(archive, ensure_ascii=False, allow_nan=False)))
+            self.connection.execute("INSERT INTO input_revisions VALUES (?, ?, ?)",
+                                    (event["id"], key, json.dumps(event, ensure_ascii=False, allow_nan=False)))
+            self.connection.execute("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'generation'")
+
+    def save_archive(self, path: str, record: dict, ignored_updates=None):
+        self.save_archives({path: record}, ignored_updates)
+
+    def save_archives(self, records, ignored_updates=None):
+        with self.connection:
+            for path, record in records.items():
+                self.connection.execute("INSERT OR REPLACE INTO archives VALUES (?, ?)",
+                                        (path, json.dumps(record, ensure_ascii=False, allow_nan=False)))
+            for relative, saved in (ignored_updates or {}).items():
+                self.connection.execute("INSERT OR REPLACE INTO ignored_files VALUES (?, ?)",
+                                        (relative, json.dumps(saved, ensure_ascii=False, allow_nan=False)))
+
+    def save_ignored_file(self, path: str, record: dict):
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO ignored_files VALUES (?, ?)",
+                                    (path, json.dumps(record, ensure_ascii=False, allow_nan=False)))
 
     def reports_exported(self, generation: int):
         with self.connection:

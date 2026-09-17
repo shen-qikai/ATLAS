@@ -35,6 +35,10 @@ products:
       wafer_required: true
       wafer_min: 1
       wafer_max: 99
+    wafer:
+      expected_die_count: 10000  # 示例，填写实际每片预计数量
+      die_count_tolerance: 50    # 允许 ±50 颗偏差
+
 
   WS1203:
     enabled: true
